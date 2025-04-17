@@ -9,7 +9,7 @@ namespace SKV
     public partial class Form1 : Form
     {
         private MathParser parser;
-        double scale = 10; // Масштаб графика
+        double scale = 20, wheelspeed = 1;
         int centerX = 0, centerY = 0, offsetX = 0, offsetY = 0; // Смещение графика
         Point lastMousePos; // Последняя позиция мыши при перетаскивании
 
@@ -51,10 +51,14 @@ namespace SKV
         {
             try
             {
+                label3.Text = "y = " + textBox1.Text;
                 var function = Regex.Replace(textBox1.Text, @"([a-zA-Z0-9_\.]+)\s*\^\s*([0-9\.]+)", "pow($1,$2)");
-                int w = pictureBox1.Width, h = pictureBox1.Height;
+                int w = pictureBox1.Width / 2, h = pictureBox1.Height / 2;
                 Bitmap bmp = new Bitmap(w, h);
                 Graphics g = Graphics.FromImage(bmp);
+                pictureBox1.Width = bmp.Width * 2;
+                pictureBox1.Height = bmp.Height * 2;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                 g.Clear(Color.White);
 
                 centerX = w / 2 + offsetX;
@@ -76,7 +80,7 @@ namespace SKV
                     g.DrawLine(Pens.LightGray, screenX, centerY - 5, screenX, centerY + 5);
 
                     if (Math.Abs(x) > 1e-6)
-                        g.DrawString(Math.Round(x / 3, 2).ToString(), this.Font, Brushes.Black, screenX + 2, centerY + 5);
+                        g.DrawString(Math.Round(x / 3, 3).ToString(), this.Font, Brushes.Black, screenX + 2, centerY + 5);
                 }
 
                 // Отрисовка делений по оси Y
@@ -95,72 +99,58 @@ namespace SKV
                 // Рисуем график функции
                 for (int px = 0; px < w - 1; px++)
                 {
-                    double x1 = (px - centerX) / scale;
-                    double x2 = (px + 1 - centerX) / scale;
+                    double x1 = (px - centerX), x2 = (px + 1 - centerX);
 
-                    parser.LocalVariables["x"] = x1;
-                    double y1;
-                    try { y1 = parser.Parse(function); }
-                    catch { continue; }
 
-                    parser.LocalVariables["x"] = x2;
-                    double y2;
-                    try { y2 = parser.Parse(function); }
-                    catch { continue; }
+                    parser.LocalVariables["x"] = x1 / scale;
+                    double y1 = parser.Parse(function);
 
-                    int py1 = centerY - (int)(y1 * scale);
-                    int py2 = centerY - (int)(y2 * scale);
+                    parser.LocalVariables["x"] = x2 / scale;
+                    double y2 = parser.Parse(function);
+
+                    int py1 = centerY - (int)(y1 * scale), py2 = centerY - (int)(y2 * scale);
 
                     if (py1 >= 0 && py1 < h && py2 >= 0 && py2 < h)
-                    {
                         g.DrawLine(new Pen(Color.Blue, 2), px, py1, px + 1, py2);
-                    }
+                    
                 }
                 // Отображаем полученное изображение на PictureBox
                 pictureBox1.Image = bmp;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                MessageBox.Show("Ошибка: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Ошибка: неправильно введена функция!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
         private void Form1_Resize(object sender, EventArgs e) => buildGraph();
 
+        private void textBox1_Leave(object sender, EventArgs e) => buildGraph();
+
+        private void textBox1_KeyDown(object sender, KeyEventArgs e) { 
+            if(e.KeyCode == Keys.Enter)buildGraph();
+        }
+
         private void pictureBox1_MouseMove(object sender, MouseEventArgs e)
         {
-            // Перетаскивание графика
             if (e.Button == MouseButtons.Left)
             {
-                toolTip1.Hide(pictureBox1);
-                int dx = e.X - lastMousePos.X;
-                int dy = e.Y - lastMousePos.Y;
-               
-                offsetX += dx;
-                offsetY += dy;
+                toolTip1.Hide(pictureBox1);            
+                offsetX += (e.X - lastMousePos.X) / 2;
+                offsetY += (e.Y - lastMousePos.Y) / 2;
                 buildGraph();
+
             }
             else
             {
-                double x = (e.X - centerX + offsetX) / scale;
-                toolTip1.Show($"f({Math.Round(x, 4)}) = {Math.Round(f(x), 4)}", pictureBox1, lastMousePos.X + 15, lastMousePos.Y + 15, 1000);
+                double x = (e.X / 2 - centerX + offsetX) / scale / 3;
+                toolTip1.Show($"f({Math.Round(x, 3)}) = {Math.Round(f(x), 3)}", pictureBox1, lastMousePos.X + 15, lastMousePos.Y + 15, 1000);
             }
             lastMousePos = e.Location;
         }
-        private void pictureBox1_Click(object sender, EventArgs e)
-        {
-            double x = (lastMousePos.X - centerX + offsetX) / scale;
-            try
-            {
-                
-            }
-            catch (Exception ) {  }
-           
-        }
         private void pictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
-            // Масштабирование графика
-            if (scale > 1 && e.Delta < 0 || scale < 1000 && e.Delta >= 0) scale += e.Delta / 100;
+            if (scale > 1 && e.Delta < 0 || scale < 1000 && e.Delta >= 0) scale += e.Delta * wheelspeed / 100;
             label2.Text = "Масштаб: " + Math.Round(scale / 20, 2) + "x";
             buildGraph();
         }
